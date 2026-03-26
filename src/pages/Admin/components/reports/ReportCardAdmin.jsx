@@ -47,10 +47,7 @@ function ReportCardAdmin({
       tabIndex={0}
     >
       <div className="report-card__header">
-        <div className="report-card__heading">
-          <p className="report-card__resident">{getResidentName(report)}</p>
-          <h3>{report.category}</h3>
-        </div>
+        <p className="report-card__resident">{getResidentName(report)}</p>
         <div className="report-card__header-actions">
           <span
             className={[
@@ -76,6 +73,10 @@ function ReportCardAdmin({
             <TrashIcon />
           </button>
         </div>
+      </div>
+
+      <div className="report-card__heading">
+        <h3>{report.category}</h3>
       </div>
 
       <div className="report-card__meta">

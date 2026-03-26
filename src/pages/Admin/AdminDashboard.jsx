@@ -683,7 +683,7 @@ function AdminDashboard() {
               <p className="dashboard-empty-state">No reports found for the current selection.</p>
             ) : (
               <div className="dashboard-report-scroll dashboard-report-scroll--today">
-                <div className="report-grid">
+                <div className={["report-grid", !selectedDate ? "report-grid--today" : ""].filter(Boolean).join(" ")}>
                   {featuredReports.map((report) => (
                     <ReportCardAdmin
                       key={report._id}
@@ -735,6 +735,7 @@ function AdminDashboard() {
 
           <ReportsSection
             id="analytics"
+            className="dashboard-panel--wide"
             title="Analytics"
             subtitle="Admin-only insights for weekly, monthly, and yearly report trends."
           >
@@ -743,6 +744,7 @@ function AdminDashboard() {
 
           <ReportsSection
             id="all-reports"
+            className="dashboard-panel--wide"
             title="All Reports"
             subtitle="Every report updates instantly as the date and status filters change."
             action={
