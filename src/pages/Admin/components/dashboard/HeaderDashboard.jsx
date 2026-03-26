@@ -7,8 +7,11 @@ function HeaderDashboard({ stats, notifications, unreadNotificationCount, onOpen
       <div className="dashboard-header__top">
         <div>
           <p className="dashboard-header__eyebrow">Admin Dashboard</p>
-          <h1>Barangay Mataas na Lupa</h1>
-          <p className="dashboard-header__subtitle">Reporting Incident System</p>
+          <h1>Update Report Status</h1>
+          <p className="dashboard-header__subtitle">
+            This UI is for Admin to update the submitted reports of the residents. The Admin can also use the
+            filter option to easily access all the pending, ongoing, or resolved reports.
+          </p>
         </div>
 
         <div className="dashboard-header__actions">

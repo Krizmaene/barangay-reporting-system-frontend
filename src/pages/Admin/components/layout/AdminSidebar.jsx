@@ -46,7 +46,7 @@ function AdminSidebar({
         <div className="reports-section__header reports-section__header--sticky">
           <div>
             <h2>Recent Requests</h2>
-            <p>Persistent list of pending and recent reports that need admin attention.</p>
+            <p>Quick access to resident reports that still need review, status updates, or follow-up.</p>
           </div>
         </div>
 

@@ -1,7 +1,14 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import AnalyticsDashboard from "../../components/analytics/AnalyticsDashboard";
-import { fetchMyNotifications, markNotificationAsRead } from "../../api/notifications";
-import { addReportComment, deleteReport, fetchAllReports, updateReportStatus } from "../../api/reports";
+import { deleteNotification, fetchMyNotifications, markNotificationAsRead } from "../../api/notifications";
+import {
+  addReportComment,
+  deleteReport,
+  deleteReportComment,
+  fetchAllReports,
+  updateReportComment,
+  updateReportStatus,
+} from "../../api/reports";
 import { AuthContext } from "../../context/authContext";
 import { formatDateTime, formatLongDate, isSameDay, toDate } from "../../utils/dateUtils";
 import {
@@ -36,13 +43,39 @@ function AdminDashboard() {
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("");
   const [statusUpdating, setStatusUpdating] = useState({});
   const [notifications, setNotifications] = useState([]);
+  const [dismissedNotificationIds, setDismissedNotificationIds] = useState([]);
   const [reportPendingDelete, setReportPendingDelete] = useState(null);
   const [isDeletingReport, setIsDeletingReport] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [isReportActionsOpen, setIsReportActionsOpen] = useState(false);
+  const [activeCommentMenuId, setActiveCommentMenuId] = useState(null);
+  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [editingCommentText, setEditingCommentText] = useState("");
+  const [commentPendingDelete, setCommentPendingDelete] = useState(null);
+  const [isDeletingComment, setIsDeletingComment] = useState(false);
+  const [isSavingCommentEdit, setIsSavingCommentEdit] = useState(false);
+  const [commentActionError, setCommentActionError] = useState("");
   const reportActionsRef = useRef(null);
 
   const reportsCacheKey = "admin-dashboard-reports";
+
+  const isNotificationLinkedToReport = (notification, report) => {
+    if (!notification || !report) {
+      return false;
+    }
+
+    const notificationReportId =
+      typeof notification.report === "string"
+        ? notification.report
+        : notification.report?._id || null;
+
+    if (notificationReportId && notificationReportId === report._id) {
+      return true;
+    }
+
+    const submittedMessage = `A new ${report.category} report was submitted in ${report.purok || "an unspecified purok"}.`;
+    return notification.message === submittedMessage;
+  };
 
   useEffect(() => {
     const cachedReports = localStorage.getItem(reportsCacheKey);
@@ -99,6 +132,13 @@ function AdminDashboard() {
     setCommentText("");
     setAttachmentFile(null);
     setIsReportActionsOpen(false);
+    setActiveCommentMenuId(null);
+    setEditingCommentId(null);
+    setEditingCommentText("");
+    setCommentPendingDelete(null);
+    setIsDeletingComment(false);
+    setIsSavingCommentEdit(false);
+    setCommentActionError("");
   }, [selectedReport]);
 
   useEffect(() => {
@@ -164,7 +204,8 @@ function AdminDashboard() {
 
   const recentRequests = useMemo(() => getRecentRequests(reports), [reports]);
   const dropdownNotifications = useMemo(() => {
-    return notifications
+    return [...notifications]
+      .filter((notification) => !dismissedNotificationIds.includes(notification._id || notification.id))
       .sort((leftNotification, rightNotification) => {
         const leftTime = new Date(leftNotification.createdAt || 0).getTime();
         const rightTime = new Date(rightNotification.createdAt || 0).getTime();
@@ -182,7 +223,7 @@ function AdminDashboard() {
         status: notification.type || "general",
         read: Boolean(notification.read),
       }));
-  }, [notifications]);
+  }, [dismissedNotificationIds, notifications]);
 
   const unreadNotificationCount = useMemo(
     () => dropdownNotifications.filter((notification) => !notification.read).length,
@@ -197,6 +238,43 @@ function AdminDashboard() {
   const updateReportsState = (nextReports) => {
     setReports(nextReports);
     localStorage.setItem(reportsCacheKey, JSON.stringify(nextReports));
+  };
+
+  const getUpdatedComments = (responseData, fallbackComments = []) => {
+    if (Array.isArray(responseData)) {
+      return responseData;
+    }
+
+    if (Array.isArray(responseData?.comments)) {
+      return responseData.comments;
+    }
+
+    return fallbackComments;
+  };
+
+  const updateReportCommentsState = (reportId, nextComments) => {
+    setSelectedReport((currentReport) =>
+      currentReport && currentReport._id === reportId
+        ? {
+            ...currentReport,
+            comments: nextComments,
+          }
+        : currentReport
+    );
+
+    setReports((currentReports) => {
+      const nextReports = currentReports.map((report) =>
+        report._id === reportId
+          ? {
+              ...report,
+              comments: nextComments,
+            }
+          : report
+      );
+
+      localStorage.setItem(reportsCacheKey, JSON.stringify(nextReports));
+      return nextReports;
+    });
   };
 
   const handleStatusChange = async (reportId, status) => {
@@ -254,6 +332,119 @@ function AdminDashboard() {
       await Promise.all([loadReports(), loadNotifications()]);
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const handleStartEditComment = (comment) => {
+    setEditingCommentId(comment._id);
+    setEditingCommentText(comment.text || "");
+    setActiveCommentMenuId(null);
+    setCommentActionError("");
+  };
+
+  const handleCancelEditComment = () => {
+    setEditingCommentId(null);
+    setEditingCommentText("");
+    setCommentActionError("");
+  };
+
+  const handleSaveCommentEdit = async () => {
+    if (!selectedReport || !editingCommentId || isSavingCommentEdit) {
+      return;
+    }
+
+    const nextText = editingCommentText.trim();
+
+    if (!nextText) {
+      setCommentActionError("Comment text cannot be empty.");
+      return;
+    }
+
+    const previousComments = selectedReport.comments || [];
+    const previousComment = previousComments.find((comment) => comment._id === editingCommentId);
+
+    if (!previousComment) {
+      setCommentActionError("Comment not found.");
+      return;
+    }
+
+    const optimisticComments = previousComments.map((comment) =>
+      comment._id === editingCommentId
+        ? {
+            ...comment,
+            text: nextText,
+            date: new Date().toISOString(),
+          }
+        : comment
+    );
+
+    setIsSavingCommentEdit(true);
+    setCommentActionError("");
+    updateReportCommentsState(selectedReport._id, optimisticComments);
+
+    try {
+      const response = await updateReportComment(selectedReport._id, editingCommentId, nextText);
+      const comments = getUpdatedComments(response, optimisticComments);
+
+      updateReportCommentsState(selectedReport._id, comments);
+      setEditingCommentId(null);
+      setEditingCommentText("");
+      await loadReports();
+    } catch (error) {
+      console.error(error);
+      updateReportCommentsState(selectedReport._id, previousComments);
+      setCommentActionError(error.response?.data?.msg || "Unable to save the comment right now.");
+    } finally {
+      setIsSavingCommentEdit(false);
+    }
+  };
+
+  const handleRequestDeleteComment = (comment) => {
+    setActiveCommentMenuId(null);
+    setCommentPendingDelete(comment);
+    setCommentActionError("");
+  };
+
+  const handleCancelDeleteComment = () => {
+    if (isDeletingComment) {
+      return;
+    }
+
+    setCommentPendingDelete(null);
+    setCommentActionError("");
+  };
+
+  const handleDeleteComment = async () => {
+    if (!selectedReport || !commentPendingDelete?._id || isDeletingComment) {
+      return;
+    }
+
+    const reportId = selectedReport._id;
+    const commentId = commentPendingDelete._id;
+    const previousComments = selectedReport.comments || [];
+    const fallbackComments = previousComments.filter((comment) => comment._id !== commentId);
+
+    setIsDeletingComment(true);
+    setCommentActionError("");
+    updateReportCommentsState(reportId, fallbackComments);
+
+    try {
+      const response = await deleteReportComment(reportId, commentId);
+      const comments = getUpdatedComments(response, fallbackComments);
+
+      updateReportCommentsState(reportId, comments);
+      setCommentPendingDelete(null);
+      if (editingCommentId === commentId) {
+        setEditingCommentId(null);
+        setEditingCommentText("");
+      }
+      await loadReports();
+    } catch (error) {
+      console.error(error);
+      updateReportCommentsState(reportId, previousComments);
+      setCommentActionError(error.response?.data?.msg || "Unable to delete the comment right now.");
+    } finally {
+      setIsDeletingComment(false);
     }
   };
 
@@ -392,22 +583,24 @@ function AdminDashboard() {
   };
 
   const handleDismissNotification = async (notificationId) => {
+    setDismissedNotificationIds((currentIds) =>
+      currentIds.includes(notificationId) ? currentIds : [...currentIds, notificationId]
+    );
+
     setNotifications((currentNotifications) =>
-      currentNotifications.map((notification) =>
-        notification._id === notificationId
-          ? {
-              ...notification,
-              read: true,
-            }
-          : notification
-      )
+      currentNotifications.filter((notification) => notification._id !== notificationId)
     );
 
     try {
-      await markNotificationAsRead(notificationId);
+      await deleteNotification(notificationId);
     } catch (error) {
       console.error(error);
-      await loadNotifications();
+
+      try {
+        await markNotificationAsRead(notificationId);
+      } catch (markReadError) {
+        console.error(markReadError);
+      }
     }
   };
 
@@ -424,6 +617,9 @@ function AdminDashboard() {
     setIsDeletingReport(true);
     setDeleteError("");
     updateReportsState(nextReports);
+    setNotifications((currentNotifications) =>
+      currentNotifications.filter((notification) => !isNotificationLinkedToReport(notification, reportToDelete))
+    );
 
     if (wasSelectedReport) {
       setSelectedReport(null);
@@ -432,9 +628,11 @@ function AdminDashboard() {
     try {
       await deleteReport(reportToDelete._id);
       setReportPendingDelete(null);
+      await loadNotifications();
     } catch (error) {
       console.error(error);
       updateReportsState(previousReports);
+      await loadNotifications();
 
       if (wasSelectedReport) {
         setSelectedReport(reportToDelete);
@@ -495,6 +693,7 @@ function AdminDashboard() {
                       onDelete={handleRequestDeleteReport}
                       statusUpdating={statusUpdating[report._id]}
                       deletePending={isDeletingReport && reportPendingDelete?._id === report._id}
+                      showDescription={false}
                     />
                   ))}
                 </div>
@@ -610,7 +809,7 @@ function AdminDashboard() {
           <div className="report-modal__backdrop" onClick={() => setSelectedReport(null)} />
           <section className="report-modal__card">
             <div className="report-modal__header">
-              <div>
+              <div className="report-modal__hero">
                 <p className="report-modal__eyebrow">{getResidentName(selectedReport)}</p>
                 <h2>{selectedReport.category}</h2>
                 <span className={`report-status report-status--${selectedReport.status}`}>
@@ -678,19 +877,19 @@ function AdminDashboard() {
 
             <div className="report-modal__body">
               <div className="report-modal__info-grid">
-                <div>
+                <div className="report-modal__info-card">
                   <span className="report-modal__label">Date Filed</span>
                   <p>{formatDateTime(selectedReport.createdAt)}</p>
                 </div>
-                <div>
+                <div className="report-modal__info-card">
                   <span className="report-modal__label">Purok</span>
                   <p>{selectedReport.purok || "N/A"}</p>
                 </div>
-                <div>
+                <div className="report-modal__info-card">
                   <span className="report-modal__label">Location</span>
                   <p>{selectedReport.location || "Location unavailable"}</p>
                 </div>
-                <div>
+                <div className="report-modal__info-card">
                   <span className="report-modal__label">Resident</span>
                   <p>{getResidentName(selectedReport)}</p>
                 </div>
@@ -745,9 +944,87 @@ function AdminDashboard() {
                   {selectedReport.comments?.length ? (
                     selectedReport.comments.map((comment) => (
                       <article key={comment._id || `${comment.text}-${comment.date}`} className="comment-card">
-                        <strong>{comment.user?.name || "Admin"}</strong>
-                        <p>{comment.text}</p>
-                        <span>{formatDateTime(comment.date)}</span>
+                        <div className="comment-card__header">
+                          <div>
+                            <strong>{comment.user?.name || "Admin"}</strong>
+                            <span>{formatDateTime(comment.date)}</span>
+                          </div>
+                          <div className="comment-card__actions">
+                            <button
+                              type="button"
+                              className={["comment-card__menu-trigger", activeCommentMenuId === comment._id ? "is-active" : ""]
+                                .filter(Boolean)
+                                .join(" ")}
+                              aria-label="Comment actions"
+                              aria-expanded={activeCommentMenuId === comment._id}
+                              onClick={() =>
+                                setActiveCommentMenuId((currentValue) => (currentValue === comment._id ? null : comment._id))
+                              }
+                            >
+                              <span />
+                              <span />
+                              <span />
+                            </button>
+
+                            {activeCommentMenuId === comment._id ? (
+                              <div className="comment-card__menu">
+                                <button
+                                  type="button"
+                                  className="comment-card__menu-item"
+                                  onClick={() => handleStartEditComment(comment)}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  type="button"
+                                  className="comment-card__menu-item comment-card__menu-item--danger"
+                                  onClick={() => handleRequestDeleteComment(comment)}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {editingCommentId === comment._id ? (
+                          <div className="comment-card__editor">
+                            <input
+                              type="text"
+                              value={editingCommentText}
+                              onChange={(event) => {
+                                setEditingCommentText(event.target.value);
+                                if (commentActionError) {
+                                  setCommentActionError("");
+                                }
+                              }}
+                              placeholder="Edit admin comment"
+                            />
+                            <div className="comment-card__editor-actions">
+                              <button
+                                type="button"
+                                className="report-action-button report-action-button--ghost"
+                                disabled={isSavingCommentEdit}
+                                onClick={handleCancelEditComment}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="report-action-button report-action-button--blue"
+                                disabled={isSavingCommentEdit}
+                                onClick={handleSaveCommentEdit}
+                              >
+                                {isSavingCommentEdit ? "Saving..." : "Save"}
+                              </button>
+                            </div>
+                            {editingCommentId === comment._id && commentActionError ? (
+                              <p className="report-modal__error">{commentActionError}</p>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p>{comment.text}</p>
+                        )}
                       </article>
                     ))
                   ) : (
@@ -859,6 +1136,53 @@ function AdminDashboard() {
                   onClick={handleConfirmDeleteReport}
                 >
                   {isDeletingReport ? "Deleting..." : "Confirm Delete"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {commentPendingDelete ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={handleCancelDeleteComment} />
+          <section className="report-modal__card report-modal__card--confirm">
+            <div className="report-modal__header">
+              <div>
+                <p className="report-modal__eyebrow">Delete Comment</p>
+                <h2 className="report-modal__confirm-title">Are you sure you want to delete this comment?</h2>
+                <p className="report-modal__confirm-copy">
+                  This action will permanently remove the comment from this report.
+                </p>
+              </div>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="delete-report-summary">
+                <div className="delete-report-summary__item delete-report-summary__item--full">
+                  <span className="report-modal__label">Comment</span>
+                  <p>{commentPendingDelete.text || "No comment text provided."}</p>
+                </div>
+              </div>
+
+              {commentActionError ? <p className="report-modal__error">{commentActionError}</p> : null}
+
+              <div className="report-modal__actions report-modal__actions--confirm">
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--ghost"
+                  disabled={isDeletingComment}
+                  onClick={handleCancelDeleteComment}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--danger"
+                  disabled={isDeletingComment}
+                  onClick={handleDeleteComment}
+                >
+                  {isDeletingComment ? "Deleting..." : "Confirm Delete"}
                 </button>
               </div>
             </div>

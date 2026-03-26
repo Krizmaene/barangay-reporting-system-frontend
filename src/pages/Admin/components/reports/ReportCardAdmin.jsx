@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { formatDateTime } from "../../../../utils/dateUtils";
 import { getResidentName, getStatusLabel } from "../../../../utils/filterUtils";
 
@@ -13,18 +12,30 @@ function TrashIcon() {
   );
 }
 
-function ReportCardAdmin({ report, onView, onStatusChange, onDelete, statusUpdating, deletePending }) {
-  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+function ReportCardAdmin({
+  report,
+  onView,
+  onStatusChange,
+  onDelete,
+  statusUpdating,
+  deletePending,
+  showDescription = true,
+}) {
   const statusLabel = getStatusLabel(report.status);
   const isUpdating = Boolean(statusUpdating);
   const isOngoing = report.status === "in_progress";
   const isResolved = report.status === "resolved";
   const description = report.description || "No description provided.";
-  const shouldClampDescription = description.length > 100;
 
   return (
     <article
-      className={["report-card", isUpdating ? "report-card--updating" : ""].filter(Boolean).join(" ")}
+      className={[
+        "report-card",
+        !showDescription ? "report-card--compact" : "",
+        isUpdating ? "report-card--updating" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       onClick={() => onView(report)}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -73,30 +84,11 @@ function ReportCardAdmin({ report, onView, onStatusChange, onDelete, statusUpdat
       </div>
 
       <div className="report-card__body">
-        <div className="report-card__description-block">
-          <p
-            className={[
-              "report-card__description",
-              shouldClampDescription && !isDescriptionExpanded ? "report-card__description--clamped" : "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {description}
-          </p>
-          {shouldClampDescription ? (
-            <button
-              type="button"
-              className="report-card__see-more"
-              onClick={(event) => {
-                event.stopPropagation();
-                setIsDescriptionExpanded((currentValue) => !currentValue);
-              }}
-            >
-              {isDescriptionExpanded ? "See less" : "See more"}
-            </button>
-          ) : null}
-        </div>
+        {showDescription ? (
+          <div className="report-card__description-block">
+            <p className="report-card__description report-card__description--clamped">{description}</p>
+          </div>
+        ) : null}
         <p className="report-card__location">{report.location || "Location unavailable"}</p>
       </div>
 

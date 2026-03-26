@@ -9,3 +9,8 @@ export async function markNotificationAsRead(notificationId) {
   const response = await API.put(`/notifications/${notificationId}/read`);
   return response.data;
 }
+
+export async function deleteNotification(notificationId) {
+  const response = await API.delete(`/notifications/${notificationId}`);
+  return response.data;
+}
