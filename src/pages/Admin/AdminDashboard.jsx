@@ -809,7 +809,7 @@ function AdminDashboard() {
       {selectedReport ? (
         <div className="report-modal" role="dialog" aria-modal="true">
           <div className="report-modal__backdrop" onClick={() => setSelectedReport(null)} />
-          <section className="report-modal__card">
+          <section className="report-modal__card report-modal__card--details">
             <div className="report-modal__header">
               <div className="report-modal__hero">
                 <p className="report-modal__eyebrow">{getResidentName(selectedReport)}</p>

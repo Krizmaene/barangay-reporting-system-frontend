@@ -1634,6 +1634,12 @@
   box-shadow: 0 34px 80px rgba(14, 31, 60, 0.32);
 }
 
+.report-modal__card--details {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 .report-modal__header {
   align-items: flex-start;
   gap: 24px;
@@ -1790,6 +1796,14 @@
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.report-modal__card--details .report-modal__body {
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 10px;
+  scrollbar-gutter: stable;
 }
 
 .report-modal__info-grid {
