@@ -34,8 +34,8 @@ export async function deleteReport(reportId) {
   return response.data;
 }
 
-export async function addReportComment(reportId, text) {
-  const response = await API.post(`/reports/${reportId}/comment`, { text });
+export async function addReportComment(reportId, text, attachment) {
+  const response = await API.post(`/reports/${reportId}/comment`, { text, attachment });
   return response.data;
 }
 

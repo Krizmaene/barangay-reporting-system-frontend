@@ -1,4 +1,5 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import API from "../../api/axios";
 import AnalyticsDashboard from "../../components/analytics/AnalyticsDashboard";
 import { deleteNotification, fetchMyNotifications, markNotificationAsRead } from "../../api/notifications";
 import {
@@ -27,8 +28,48 @@ import ReportCardAdmin from "./components/reports/ReportCardAdmin";
 import ReportsSection from "./components/reports/ReportsSection";
 import "./AdminDashboard.css";
 
+const INITIAL_RESIDENT_FORM = {
+  email: "",
+  password: "",
+  confirmPassword: "",
+  fullName: "",
+  purokNumber: "",
+  contactNumber: "",
+  age: "",
+  gender: "",
+};
+
+const PUROK_OPTIONS = ["Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5"];
+const DEFAULT_ADMIN_EMAIL = "brgymataasnalupa@brs.com";
+const RESIDENT_DETAILS_FIELDS = [
+  { key: "email", label: "Email" },
+  { key: "name", label: "Full Name" },
+  { key: "purokNumber", label: "Purok Number" },
+  { key: "contactNumber", label: "Contact Number" },
+  { key: "age", label: "Age" },
+  { key: "gender", label: "Gender" },
+];
+
+function EyeIcon({ isVisible }) {
+  return isVisible ? (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M3.53 2.47a.75.75 0 0 0-1.06 1.06l2.3 2.3A12.6 12.6 0 0 0 1.7 9.98a1.9 1.9 0 0 0 0 2.04C3.57 15.06 7.28 18 12 18c1.87 0 3.58-.46 5.08-1.22l3.39 3.39a.75.75 0 1 0 1.06-1.06Zm8.47 4.28A5.25 5.25 0 0 1 17.25 12c0 .64-.11 1.25-.3 1.82l-6.47-6.47c.48-.19 1-.3 1.52-.3Zm-5.2 1.12 6.33 6.33A5.25 5.25 0 0 1 6.8 7.87Zm5.2-3.87c4.72 0 8.43 2.94 10.3 5.98a1.9 1.9 0 0 1 0 2.04 14.68 14.68 0 0 1-2.33 2.89l-1.07-1.07A6.67 6.67 0 0 0 19.5 12 6.75 6.75 0 0 0 8.25 6.97L6.64 5.36A10.14 10.14 0 0 1 12 4.01Z"
+        fill="currentColor"
+      />
+    </svg>
+  ) : (
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M12 5.25c-4.75 0-8.44 2.95-10.3 5.98a1.83 1.83 0 0 0 0 1.54c1.86 3.03 5.55 5.98 10.3 5.98s8.44-2.95 10.3-5.98a1.83 1.83 0 0 0 0-1.54c-1.86-3.03-5.55-5.98-10.3-5.98Zm0 11.25A4.5 4.5 0 1 1 12 7.5a4.5 4.5 0 0 1 0 9Zm0-1.5A3 3 0 1 0 12 9a3 3 0 0 0 0 6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
 function AdminDashboard() {
-  const { logout } = useContext(AuthContext);
+  const { logout, user } = useContext(AuthContext);
   const [reports, setReports] = useState([]);
   const [todayStatusFilter, setTodayStatusFilter] = useState("");
   const [purokStatusFilter, setPurokStatusFilter] = useState("");
@@ -41,6 +82,8 @@ function AdminDashboard() {
   const [commentText, setCommentText] = useState("");
   const [attachmentFile, setAttachmentFile] = useState(null);
   const [attachmentPreviewUrl, setAttachmentPreviewUrl] = useState("");
+  const [isAddingComment, setIsAddingComment] = useState(false);
+  const [recentCommentId, setRecentCommentId] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState({});
   const [notifications, setNotifications] = useState([]);
   const [dismissedNotificationIds, setDismissedNotificationIds] = useState([]);
@@ -55,9 +98,54 @@ function AdminDashboard() {
   const [isDeletingComment, setIsDeletingComment] = useState(false);
   const [isSavingCommentEdit, setIsSavingCommentEdit] = useState(false);
   const [commentActionError, setCommentActionError] = useState("");
+  const [isAddResidentOpen, setIsAddResidentOpen] = useState(false);
+  const [residentForm, setResidentForm] = useState(INITIAL_RESIDENT_FORM);
+  const [residentErrors, setResidentErrors] = useState({});
+  const [residentSubmitError, setResidentSubmitError] = useState("");
+  const [isCreatingResident, setIsCreatingResident] = useState(false);
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isConfirmPasswordVisible, setIsConfirmPasswordVisible] = useState(false);
+  const [residentAutocompleteSeed, setResidentAutocompleteSeed] = useState(() => Date.now());
+  const [residentFieldLocks, setResidentFieldLocks] = useState({
+    password: true,
+    confirmPassword: true,
+    fullName: true,
+  });
+  const [isDiscardResidentConfirmOpen, setIsDiscardResidentConfirmOpen] = useState(false);
+  const [isResidentSuccessOpen, setIsResidentSuccessOpen] = useState(false);
+  const [isManageResidentsOpen, setIsManageResidentsOpen] = useState(false);
+  const [residents, setResidents] = useState([]);
+  const [residentsSearchTerm, setResidentsSearchTerm] = useState("");
+  const [isResidentsLoading, setIsResidentsLoading] = useState(false);
+  const [residentsError, setResidentsError] = useState("");
+  const [selectedResidentDetails, setSelectedResidentDetails] = useState(null);
+  const [isResidentDetailsLoading, setIsResidentDetailsLoading] = useState(false);
+  const [residentDetailsError, setResidentDetailsError] = useState("");
+  const [residentReportSummary, setResidentReportSummary] = useState(null);
+  const [isResidentReportSummaryLoading, setIsResidentReportSummaryLoading] = useState(false);
+  const [residentReportSummaryError, setResidentReportSummaryError] = useState("");
+  const [residentPendingDelete, setResidentPendingDelete] = useState(null);
+  const [isDeletingResident, setIsDeletingResident] = useState(false);
+  const [deleteResidentError, setDeleteResidentError] = useState("");
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const reportActionsRef = useRef(null);
+  const attachmentInputRef = useRef(null);
 
   const reportsCacheKey = "admin-dashboard-reports";
+  const storedUser = useMemo(() => {
+    try {
+      const rawUser = localStorage.getItem("user");
+      return rawUser ? JSON.parse(rawUser) : null;
+    } catch (error) {
+      console.error(error);
+      return null;
+    }
+  }, []);
+  const adminUser = user || storedUser;
+  const profileEmail = adminUser?.email || DEFAULT_ADMIN_EMAIL;
+  const profileRole = adminUser?.role || "admin";
+  const profileName = adminUser?.name || "Barangay Administrator";
 
   const isNotificationLinkedToReport = (notification, report) => {
     if (!notification || !report) {
@@ -95,6 +183,42 @@ function AdminDashboard() {
     }
   }, [reports.length, reportsCacheKey]);
 
+  useEffect(() => {
+    const isAnyModalOpen =
+      isAddResidentOpen ||
+      isDiscardResidentConfirmOpen ||
+      isResidentSuccessOpen ||
+      isManageResidentsOpen ||
+      Boolean(selectedResidentDetails) ||
+      Boolean(residentPendingDelete) ||
+      isProfileModalOpen ||
+      isLogoutConfirmOpen ||
+      Boolean(selectedReport) ||
+      Boolean(reportPendingDelete);
+
+    if (!isAnyModalOpen) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [
+    isAddResidentOpen,
+    isDiscardResidentConfirmOpen,
+    isResidentSuccessOpen,
+    isManageResidentsOpen,
+    selectedResidentDetails,
+    residentPendingDelete,
+    isProfileModalOpen,
+    isLogoutConfirmOpen,
+    selectedReport,
+    reportPendingDelete,
+  ]);
+
   const loadReports = async () => {
     try {
       const data = await fetchAllReports();
@@ -114,10 +238,45 @@ function AdminDashboard() {
     }
   };
 
+  const loadResidents = async ({ preserveError = false } = {}) => {
+    setIsResidentsLoading(true);
+
+    if (!preserveError) {
+      setResidentsError("");
+    }
+
+    try {
+      let response;
+
+      try {
+        response = await API.get("/auth/admin/residents");
+      } catch (primaryError) {
+        response = await API.get("/auth/residents");
+      }
+
+      const payload = response?.data;
+      const nextResidents = Array.isArray(payload) ? payload : Array.isArray(payload?.residents) ? payload.residents : [];
+      setResidents(nextResidents);
+    } catch (error) {
+      console.error(error);
+      setResidentsError(error.response?.data?.msg || "Unable to load residents right now. Please try again.");
+    } finally {
+      setIsResidentsLoading(false);
+    }
+  };
+
   useEffect(() => {
     loadReports();
     loadNotifications();
   }, []);
+
+  useEffect(() => {
+    if (!isManageResidentsOpen) {
+      return;
+    }
+
+    loadResidents();
+  }, [isManageResidentsOpen]);
 
   useEffect(() => {
     if (!selectedReport) {
@@ -131,6 +290,9 @@ function AdminDashboard() {
   useEffect(() => {
     setCommentText("");
     setAttachmentFile(null);
+    setAttachmentPreviewUrl("");
+    setIsAddingComment(false);
+    setRecentCommentId(null);
     setIsReportActionsOpen(false);
     setActiveCommentMenuId(null);
     setEditingCommentId(null);
@@ -170,7 +332,28 @@ function AdminDashboard() {
     };
   }, [attachmentFile]);
 
+  useEffect(() => {
+    if (!recentCommentId) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setRecentCommentId(null);
+    }, 1800);
+
+    return () => window.clearTimeout(timer);
+  }, [recentCommentId]);
+
   const stats = useMemo(() => getReportStats(reports), [reports]);
+  const profileReportSummary = useMemo(
+    () => [
+      { label: "Total Reports", value: stats?.total ?? 0 },
+      { label: "Pending Reports", value: stats?.pending ?? 0 },
+      { label: "Resolved Reports", value: stats?.resolved ?? 0 },
+      { label: "In Progress Reports", value: stats?.ongoing ?? 0 },
+    ],
+    [stats]
+  );
   const purokFilteredReports = useMemo(
     () => filterReports(reports, { selectedStatus: purokStatusFilter }),
     [reports, purokStatusFilter]
@@ -229,10 +412,422 @@ function AdminDashboard() {
     () => dropdownNotifications.filter((notification) => !notification.read).length,
     [dropdownNotifications]
   );
+  const visibleResidents = useMemo(() => {
+    const normalizedSearchTerm = residentsSearchTerm.trim().toLowerCase();
+
+    if (!normalizedSearchTerm) {
+      return residents;
+    }
+
+    return residents.filter((resident) =>
+      [resident.name, resident.email, resident.purokNumber, resident.contactNumber, resident.gender]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedSearchTerm))
+    );
+  }, [residents, residentsSearchTerm]);
+  const residentSummary = useMemo(() => {
+    const total = residents.length;
+    const puroksCovered = new Set(residents.map((resident) => resident.purokNumber).filter(Boolean)).size;
+
+    return {
+      total,
+      puroksCovered,
+    };
+  }, [residents]);
+
+  const getResidentDisplayValue = (resident, key) => {
+    if (!resident) {
+      return "Not available";
+    }
+
+    const value = resident[key];
+    return value === null || value === undefined || value === "" ? "Not available" : value;
+  };
+  const residentReportSummaryCards = useMemo(
+    () => [
+      { label: "Total Reports", value: residentReportSummary?.totalReports ?? 0, tone: "blue" },
+      { label: "Pending Reports", value: residentReportSummary?.pending ?? 0, tone: "yellow" },
+      { label: "In Progress Reports", value: residentReportSummary?.inProgress ?? 0, tone: "blue" },
+      { label: "Resolved Reports", value: residentReportSummary?.resolved ?? 0, tone: "green" },
+    ],
+    [residentReportSummary]
+  );
+  const buildResidentReportSummaryFromReports = (residentId) => {
+    const residentReports = reports.filter((report) => {
+      const linkedResidentId =
+        typeof report.resident === "string" ? report.resident : report.resident?._id || null;
+      return linkedResidentId === residentId;
+    });
+
+    return {
+      totalReports: residentReports.length,
+      pending: residentReports.filter((report) => report.status === "pending").length,
+      inProgress: residentReports.filter((report) => report.status === "in_progress").length,
+      resolved: residentReports.filter((report) => report.status === "resolved").length,
+    };
+  };
 
   const handleLogout = () => {
     logout();
     window.location.href = "/";
+  };
+
+  const hasResidentUnsavedChanges = Object.values(residentForm).some((value) => String(value).trim() !== "");
+  const getPasswordStrength = (passwordValue) => {
+    if (!passwordValue) {
+      return null;
+    }
+
+    if (passwordValue.length < 8) {
+      return { label: "Weak", className: "is-weak" };
+    }
+
+    if (passwordValue.length < 12) {
+      return { label: "Medium", className: "is-medium" };
+    }
+
+    return { label: "Strong", className: "is-strong" };
+  };
+
+  const validateResidentField = (field, nextValue, formValues) => {
+    switch (field) {
+      case "email":
+        if (!nextValue.trim()) {
+          return "Email is required.";
+        }
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextValue.trim()) ? "" : "Please enter a valid email address.";
+      case "password":
+        if (!nextValue) {
+          return "Password is required.";
+        }
+        return nextValue.length >= 8 ? "" : "Password must be at least 8 characters.";
+      case "confirmPassword":
+        if (!nextValue) {
+          return "Please confirm the password.";
+        }
+        return nextValue === formValues.password ? "" : "Passwords do not match.";
+      case "fullName":
+        return nextValue.trim() ? "" : "Full name is required.";
+      case "purokNumber":
+        return PUROK_OPTIONS.includes(nextValue) ? "" : "Please select a valid purok.";
+      case "contactNumber":
+        if (!nextValue) {
+          return "Contact number is required.";
+        }
+        return /^09\d{9}$/.test(nextValue) ? "" : "Please enter a valid contact number.";
+      case "age": {
+        const ageValue = Number(nextValue);
+        if (!nextValue) {
+          return "Age is required.";
+        }
+        return Number.isInteger(ageValue) && ageValue >= 1 && ageValue <= 120
+          ? ""
+          : "Enter a valid age between 1 and 120.";
+      }
+      case "gender":
+        return nextValue ? "" : "Gender is required.";
+      default:
+        return "";
+    }
+  };
+
+  const validateResidentForm = (formValues = residentForm) => {
+    const nextErrors = {};
+    Object.keys(formValues).forEach((field) => {
+      const message = validateResidentField(field, formValues[field], formValues);
+      if (message) {
+        nextErrors[field] = message;
+      }
+    });
+
+    return nextErrors;
+  };
+
+  const resetResidentFormState = () => {
+    setResidentForm(INITIAL_RESIDENT_FORM);
+    setResidentErrors({});
+    setResidentSubmitError("");
+    setIsPasswordVisible(false);
+    setIsConfirmPasswordVisible(false);
+    setResidentFieldLocks({
+      password: true,
+      confirmPassword: true,
+      fullName: true,
+    });
+    setIsDiscardResidentConfirmOpen(false);
+  };
+
+  const unlockResidentField = (field) => () => {
+    setResidentFieldLocks((currentLocks) =>
+      currentLocks[field]
+        ? {
+            ...currentLocks,
+            [field]: false,
+          }
+        : currentLocks
+    );
+  };
+
+  const handleOpenAddResident = () => {
+    resetResidentFormState();
+    setResidentAutocompleteSeed(Date.now());
+    setIsAddResidentOpen(true);
+  };
+
+  const getResidentMaskedInputStyle = (isVisible) =>
+    isVisible
+      ? undefined
+      : {
+          WebkitTextSecurity: "disc",
+        };
+
+  const closeAddResidentImmediately = () => {
+    if (isCreatingResident) {
+      return;
+    }
+
+    setIsAddResidentOpen(false);
+    resetResidentFormState();
+  };
+
+  const handleRequestCloseAddResident = () => {
+    if (isCreatingResident) {
+      return;
+    }
+
+    if (hasResidentUnsavedChanges) {
+      setIsDiscardResidentConfirmOpen(true);
+      return;
+    }
+
+    closeAddResidentImmediately();
+  };
+
+  const handleResidentInputChange = (field) => (event) => {
+    const rawValue = event.target.value;
+    const nextValue =
+      field === "contactNumber"
+        ? rawValue.replace(/\D/g, "").slice(0, 11)
+        : field === "age"
+          ? rawValue.replace(/[^\d]/g, "").slice(0, 3)
+          : rawValue;
+
+    setResidentForm((currentForm) => {
+      const nextForm = {
+        ...currentForm,
+        [field]: nextValue,
+      };
+
+      const nextErrors = { ...residentErrors };
+      const fieldMessage = validateResidentField(field, nextValue, nextForm);
+
+      if (fieldMessage) {
+        nextErrors[field] = fieldMessage;
+      } else {
+        delete nextErrors[field];
+      }
+
+      if (field === "password" && nextForm.confirmPassword) {
+        const confirmMessage = validateResidentField("confirmPassword", nextForm.confirmPassword, nextForm);
+        if (confirmMessage) {
+          nextErrors.confirmPassword = confirmMessage;
+        } else {
+          delete nextErrors.confirmPassword;
+        }
+      }
+
+      setResidentErrors(nextErrors);
+      return nextForm;
+    });
+
+    if (residentSubmitError) {
+      setResidentSubmitError("");
+    }
+  };
+
+  const handleCreateResident = async (event) => {
+    event.preventDefault();
+
+    if (isCreatingResident) {
+      return;
+    }
+
+    const validationErrors = validateResidentForm();
+    setResidentErrors(validationErrors);
+
+    if (Object.keys(validationErrors).length > 0) {
+      return;
+    }
+
+    setIsCreatingResident(true);
+    setResidentSubmitError("");
+
+    try {
+      await API.post("/auth/register", {
+        name: residentForm.fullName.trim(),
+        email: residentForm.email.trim(),
+        password: residentForm.password,
+        purokNumber: residentForm.purokNumber.trim(),
+        contactNumber: residentForm.contactNumber.trim(),
+        age: Number(residentForm.age),
+        gender: residentForm.gender,
+        role: "resident",
+      });
+
+      if (isManageResidentsOpen) {
+        await loadResidents({ preserveError: true });
+      }
+
+      setIsAddResidentOpen(false);
+      resetResidentFormState();
+      setIsResidentSuccessOpen(true);
+    } catch (error) {
+      console.error(error);
+      setResidentSubmitError(error.response?.data?.msg || "Unable to add resident right now. Please try again.");
+    } finally {
+      setIsCreatingResident(false);
+    }
+  };
+
+  const handleOpenManageResidents = async () => {
+    setIsManageResidentsOpen(true);
+    setResidentsSearchTerm("");
+    setResidentsError("");
+    setResidentDetailsError("");
+    setDeleteResidentError("");
+  };
+
+  const handleCloseManageResidents = () => {
+    if (isDeletingResident) {
+      return;
+    }
+
+    setIsManageResidentsOpen(false);
+    setResidentsSearchTerm("");
+    setResidentsError("");
+    setResidentDetailsError("");
+  };
+
+  const handleViewResidentDetails = async (residentId) => {
+    setIsResidentDetailsLoading(true);
+    setResidentDetailsError("");
+    setResidentReportSummary(null);
+    setResidentReportSummaryError("");
+    setIsResidentReportSummaryLoading(true);
+
+    try {
+      const residentResponse = await (async () => {
+        try {
+          return await API.get(`/auth/admin/residents/${residentId}`);
+        } catch (primaryError) {
+          return await API.get(`/auth/residents/${residentId}`);
+        }
+      })();
+
+      setSelectedResidentDetails(residentResponse?.data || null);
+    } catch (error) {
+      console.error(error);
+      setResidentDetailsError(error.response?.data?.msg || "Unable to load resident details right now. Please try again.");
+    } finally {
+      setIsResidentDetailsLoading(false);
+    }
+
+    try {
+      const summaryResponse = await API.get(`/reports/resident/${residentId}/summary`);
+      setResidentReportSummary(summaryResponse?.data || null);
+    } catch (error) {
+      console.error(error);
+
+      const fallbackSummary = buildResidentReportSummaryFromReports(residentId);
+      setResidentReportSummary(fallbackSummary);
+    } finally {
+      setIsResidentReportSummaryLoading(false);
+    }
+  };
+
+  const handleCloseResidentDetails = () => {
+    setSelectedResidentDetails(null);
+    setResidentDetailsError("");
+    setResidentReportSummary(null);
+    setResidentReportSummaryError("");
+  };
+
+  const handleRequestDeleteResident = (resident) => {
+    setResidentPendingDelete(resident);
+    setDeleteResidentError("");
+  };
+
+  const handleConfirmDeleteResident = async () => {
+    if (!residentPendingDelete || isDeletingResident) {
+      return;
+    }
+
+    setIsDeletingResident(true);
+    setDeleteResidentError("");
+
+    try {
+      const deletedResidentId = residentPendingDelete._id;
+      const deletedReportIds = reports
+        .filter((report) => {
+          const residentId =
+            typeof report.resident === "string" ? report.resident : report.resident?._id || null;
+          return residentId === deletedResidentId;
+        })
+        .map((report) => report._id);
+
+      try {
+        await API.delete(`/auth/admin/residents/${deletedResidentId}`);
+      } catch (primaryError) {
+        await API.delete(`/auth/residents/${deletedResidentId}`);
+      }
+
+      setResidents((currentResidents) => currentResidents.filter((resident) => resident._id !== deletedResidentId));
+
+      if (selectedResidentDetails?._id === deletedResidentId) {
+        setSelectedResidentDetails(null);
+      }
+
+      setReports((currentReports) => {
+        const nextReports = currentReports.filter((report) => {
+          const residentId =
+            typeof report.resident === "string" ? report.resident : report.resident?._id || null;
+          return residentId !== deletedResidentId;
+        });
+
+        localStorage.setItem(reportsCacheKey, JSON.stringify(nextReports));
+        return nextReports;
+      });
+      setNotifications((currentNotifications) =>
+        currentNotifications.filter((notification) => {
+          const notificationReportId =
+            typeof notification.report === "string" ? notification.report : notification.report?._id || null;
+          const notificationUserId =
+            typeof notification.user === "string" ? notification.user : notification.user?._id || null;
+
+          return notificationUserId !== deletedResidentId && !deletedReportIds.includes(notificationReportId);
+        })
+      );
+
+      setResidentPendingDelete(null);
+    } catch (error) {
+      console.error(error);
+      setDeleteResidentError(error.response?.data?.msg || "Unable to delete this resident account right now. Please try again.");
+    } finally {
+      setIsDeletingResident(false);
+    }
+  };
+
+  const handleOpenProfile = () => {
+    setIsProfileModalOpen(true);
+  };
+
+  const handleCloseProfile = () => {
+    setIsProfileModalOpen(false);
+  };
+
+  const handleRequestLogout = () => {
+    setIsProfileModalOpen(false);
+    setIsLogoutConfirmOpen(true);
   };
 
   const updateReportsState = (nextReports) => {
@@ -321,18 +916,80 @@ function AdminDashboard() {
   };
 
   const handleAddComment = async () => {
-    if (!selectedReport || !commentText.trim()) {
+    if (!selectedReport || (!commentText.trim() && !attachmentFile) || isAddingComment) {
       return;
     }
 
     try {
-      await addReportComment(selectedReport._id, commentText.trim());
+      setIsAddingComment(true);
+      let attachmentPayload;
+
+      if (attachmentFile) {
+        const attachmentUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error("Unable to read the selected attachment."));
+          reader.readAsDataURL(attachmentFile);
+        });
+
+        attachmentPayload = {
+          name: attachmentFile.name,
+          mimeType: attachmentFile.type || "application/octet-stream",
+          url: attachmentUrl,
+          isImage: attachmentFile.type.startsWith("image/"),
+        };
+      }
+
+      const response = await addReportComment(selectedReport._id, commentText.trim(), attachmentPayload);
+      const nextComments = getUpdatedComments(response, selectedReport.comments || []);
+      const newestComment = nextComments[nextComments.length - 1];
+
+      updateReportCommentsState(selectedReport._id, nextComments);
+      setRecentCommentId(newestComment?._id || null);
       setCommentText("");
       setAttachmentFile(null);
+      setAttachmentPreviewUrl("");
+      setCommentActionError("");
+      if (attachmentInputRef.current) {
+        attachmentInputRef.current.value = "";
+      }
       await Promise.all([loadReports(), loadNotifications()]);
     } catch (error) {
       console.error(error);
+      setCommentActionError(error.response?.data?.msg || error.message || "Unable to add the comment right now.");
+    } finally {
+      setIsAddingComment(false);
     }
+  };
+
+  const getCommentAttachment = (comment) => {
+    const item = comment?.attachment;
+
+    if (!item?.url) {
+      return null;
+    }
+
+    const name = item.name || item.fileName || item.originalName || "Attachment";
+    const type = item.mimeType || item.type || "";
+    const isImage = Boolean(item.isImage) || type.startsWith("image/") || /^data:image\//i.test(item.url);
+    const normalizedUrl =
+      /^https?:\/\//i.test(item.url) || /^data:/i.test(item.url)
+        ? item.url
+        : `${API.defaults.baseURL?.replace(/\/api$/, "") || "http://localhost:5000"}${item.url}`;
+
+    return {
+      name,
+      url: normalizedUrl,
+      isImage,
+    };
+  };
+
+  const getReportResidentId = (report) => {
+    if (!report) {
+      return null;
+    }
+
+    return typeof report.resident === "string" ? report.resident : report.resident?._id || null;
   };
 
   const handleStartEditComment = (comment) => {
@@ -646,7 +1303,13 @@ function AdminDashboard() {
 
   return (
     <div className="barangay-dashboard">
-      <AdminNavbar onLogout={handleLogout} />
+      <AdminNavbar
+        adminName={adminUser?.name || "Administrator"}
+        onAddResident={handleOpenAddResident}
+        onManageResidents={handleOpenManageResidents}
+        onViewProfile={handleOpenProfile}
+        onRequestLogout={handleRequestLogout}
+      />
 
       <div className="barangay-dashboard__content">
         <main className="barangay-dashboard__main">
@@ -680,7 +1343,9 @@ function AdminDashboard() {
             }
           >
             {featuredReports.length === 0 ? (
-              <p className="dashboard-empty-state">No reports found for the current selection.</p>
+              <div className="dashboard-report-scroll dashboard-report-scroll--today dashboard-report-scroll--empty">
+                <p className="dashboard-empty-state">No reports found for the current selection.</p>
+              </div>
             ) : (
               <div className="dashboard-report-scroll dashboard-report-scroll--today">
                 <div className={["report-grid", !selectedDate ? "report-grid--today" : ""].filter(Boolean).join(" ")}>
@@ -806,6 +1471,677 @@ function AdminDashboard() {
         />
       </div>
 
+      {isAddResidentOpen ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" />
+          <section className="report-modal__card report-modal__card--resident">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow report-modal__eyebrow--blue">Resident Registration</p>
+                <h2>Add Resident</h2>
+                <p className="resident-modal__subtitle">
+                  Create a resident account without leaving the dashboard.
+                </p>
+              </div>
+              <button type="button" className="report-modal__close" onClick={handleRequestCloseAddResident}>
+                Close
+              </button>
+            </div>
+
+            <div className="report-modal__body">
+              <form className="resident-modal__form" onSubmit={handleCreateResident} autoComplete="off">
+                <input className="resident-modal__autofill-trap" type="text" name="fake-username" autoComplete="username" tabIndex="-1" />
+                <input
+                  className="resident-modal__autofill-trap"
+                  type="password"
+                  name="fake-password"
+                  autoComplete="current-password"
+                  tabIndex="-1"
+                />
+                <div className="resident-modal__grid">
+                  <label className="resident-modal__field resident-modal__field--wide">
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      value={residentForm.email}
+                      onChange={handleResidentInputChange("email")}
+                      placeholder="Enter email address"
+                      aria-invalid={Boolean(residentErrors.email)}
+                      name="resident-email"
+                      autoComplete="new-password"
+                      spellCheck="false"
+                      required
+                    />
+                    {residentErrors.email ? <small className="resident-modal__field-error">{residentErrors.email}</small> : null}
+                  </label>
+
+                  <label className="resident-modal__field">
+                    <span>Password</span>
+                    <div className="resident-modal__input-wrap">
+                      <input
+                        key={`resident-password-${residentAutocompleteSeed}`}
+                        type="text"
+                        value={residentForm.password}
+                        onChange={handleResidentInputChange("password")}
+                        onFocus={unlockResidentField("password")}
+                        placeholder="Enter password"
+                        aria-invalid={Boolean(residentErrors.password)}
+                        name={`resident-password-${residentAutocompleteSeed}`}
+                        autoComplete="new-password"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck="false"
+                        readOnly={residentFieldLocks.password}
+                        style={getResidentMaskedInputStyle(isPasswordVisible)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="resident-modal__toggle"
+                        aria-label={isPasswordVisible ? "Hide password" : "Show password"}
+                        onClick={() => setIsPasswordVisible((currentValue) => !currentValue)}
+                      >
+                        <EyeIcon isVisible={isPasswordVisible} />
+                      </button>
+                    </div>
+                    {residentForm.password ? (
+                      <div className="resident-modal__strength">
+                        <div className="resident-modal__strength-track">
+                          <span
+                            className={["resident-modal__strength-fill", getPasswordStrength(residentForm.password)?.className]
+                              .filter(Boolean)
+                              .join(" ")}
+                          />
+                        </div>
+                        <small>{getPasswordStrength(residentForm.password)?.label}</small>
+                      </div>
+                    ) : null}
+                    {residentErrors.password ? <small className="resident-modal__field-error">{residentErrors.password}</small> : null}
+                  </label>
+
+                  <label className="resident-modal__field">
+                    <span>Confirm Password</span>
+                    <div className="resident-modal__input-wrap">
+                      <input
+                        key={`resident-confirm-password-${residentAutocompleteSeed}`}
+                        type="text"
+                        value={residentForm.confirmPassword}
+                        onChange={handleResidentInputChange("confirmPassword")}
+                        onFocus={unlockResidentField("confirmPassword")}
+                        placeholder="Confirm password"
+                        aria-invalid={Boolean(residentErrors.confirmPassword)}
+                        name={`resident-confirm-password-${residentAutocompleteSeed}`}
+                        autoComplete="new-password"
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        autoCapitalize="off"
+                        autoCorrect="off"
+                        spellCheck="false"
+                        readOnly={residentFieldLocks.confirmPassword}
+                        style={getResidentMaskedInputStyle(isConfirmPasswordVisible)}
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="resident-modal__toggle"
+                        aria-label={isConfirmPasswordVisible ? "Hide confirm password" : "Show confirm password"}
+                        onClick={() => setIsConfirmPasswordVisible((currentValue) => !currentValue)}
+                      >
+                        <EyeIcon isVisible={isConfirmPasswordVisible} />
+                      </button>
+                    </div>
+                    {residentErrors.confirmPassword ? (
+                      <small className="resident-modal__field-error">{residentErrors.confirmPassword}</small>
+                    ) : null}
+                  </label>
+
+                  <label className="resident-modal__field resident-modal__field--wide">
+                    <span>Full Name</span>
+                    <input
+                      key={`resident-full-name-${residentAutocompleteSeed}`}
+                      type="text"
+                      value={residentForm.fullName}
+                      onChange={handleResidentInputChange("fullName")}
+                      onFocus={unlockResidentField("fullName")}
+                      placeholder="Enter full name"
+                      aria-invalid={Boolean(residentErrors.fullName)}
+                      name={`resident-full-name-${residentAutocompleteSeed}`}
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      readOnly={residentFieldLocks.fullName}
+                      spellCheck="false"
+                      autoCapitalize="words"
+                      autoCorrect="off"
+                      required
+                    />
+                    {residentErrors.fullName ? (
+                      <small className="resident-modal__field-error">{residentErrors.fullName}</small>
+                    ) : null}
+                  </label>
+
+                  <label className="resident-modal__field">
+                    <span>Purok Number</span>
+                    <select
+                      value={residentForm.purokNumber}
+                      onChange={handleResidentInputChange("purokNumber")}
+                      aria-invalid={Boolean(residentErrors.purokNumber)}
+                      required
+                    >
+                      <option value="">Select purok</option>
+                      {PUROK_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    {residentErrors.purokNumber ? (
+                      <small className="resident-modal__field-error">{residentErrors.purokNumber}</small>
+                    ) : null}
+                  </label>
+
+                  <label className="resident-modal__field">
+                    <span>Contact Number</span>
+                    <input
+                      type="text"
+                      value={residentForm.contactNumber}
+                      onChange={handleResidentInputChange("contactNumber")}
+                      placeholder="Enter contact number"
+                      aria-invalid={Boolean(residentErrors.contactNumber)}
+                      inputMode="numeric"
+                      pattern="09[0-9]{9}"
+                      autoComplete="new-password"
+                      required
+                    />
+                    {residentErrors.contactNumber ? (
+                      <small className="resident-modal__field-error">{residentErrors.contactNumber}</small>
+                    ) : null}
+                  </label>
+
+                  <label className="resident-modal__field">
+                    <span>Age</span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={residentForm.age}
+                      onChange={handleResidentInputChange("age")}
+                      placeholder="Enter age"
+                      aria-invalid={Boolean(residentErrors.age)}
+                      required
+                    />
+                    {residentErrors.age ? <small className="resident-modal__field-error">{residentErrors.age}</small> : null}
+                  </label>
+
+                  <label className="resident-modal__field">
+                    <span>Gender</span>
+                    <select
+                      value={residentForm.gender}
+                      onChange={handleResidentInputChange("gender")}
+                      aria-invalid={Boolean(residentErrors.gender)}
+                      required
+                    >
+                      <option value="">Select gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                    </select>
+                    {residentErrors.gender ? <small className="resident-modal__field-error">{residentErrors.gender}</small> : null}
+                  </label>
+                </div>
+
+                {residentSubmitError ? <p className="report-modal__error">{residentSubmitError}</p> : null}
+
+                <div className="resident-modal__actions">
+                  <button
+                    type="button"
+                    className="report-action-button report-action-button--ghost"
+                    onClick={handleRequestCloseAddResident}
+                    disabled={isCreatingResident}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="report-action-button report-action-button--blue" disabled={isCreatingResident}>
+                    {isCreatingResident ? "Adding Resident..." : "Add Resident"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isDiscardResidentConfirmOpen ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={() => setIsDiscardResidentConfirmOpen(false)} />
+          <section className="report-modal__card report-modal__card--confirm report-modal__card--decision">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow">Discard Changes?</p>
+                <h2 className="report-modal__confirm-title">Discard resident details?</h2>
+                <p className="report-modal__confirm-copy">
+                  You have unsaved resident information. If you leave now, the details you entered will be lost.
+                </p>
+              </div>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="report-modal__decision-card">
+                <span className="report-modal__label">Current action</span>
+                <p>Close the Add Resident form without saving.</p>
+              </div>
+              <div className="report-modal__actions report-modal__actions--confirm">
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--ghost"
+                  onClick={() => setIsDiscardResidentConfirmOpen(false)}
+                >
+                  Keep Editing
+                </button>
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--danger"
+                  onClick={closeAddResidentImmediately}
+                >
+                  Discard
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isResidentSuccessOpen ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={() => setIsResidentSuccessOpen(false)} />
+          <section className="report-modal__card report-modal__card--confirm report-modal__card--decision">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow report-modal__eyebrow--blue">Success</p>
+                <h2 className="report-modal__confirm-title">Resident Successfully Registered</h2>
+                <p className="report-modal__confirm-copy">
+                  The resident account has been created successfully. You can continue managing residents from the dashboard.
+                </p>
+              </div>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="report-modal__decision-card">
+                <span className="report-modal__label">Registration completed</span>
+                <p>The new resident information has been saved and the account is ready to use.</p>
+              </div>
+              <div className="report-modal__actions report-modal__actions--confirm">
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--blue"
+                  onClick={() => setIsResidentSuccessOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isManageResidentsOpen ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={handleCloseManageResidents} />
+          <section className="report-modal__card report-modal__card--resident-management">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow report-modal__eyebrow--blue">Residents Directory</p>
+                <h2>Manage Residents</h2>
+                <p className="resident-modal__subtitle">
+                  Review resident accounts, open their details, and remove accounts when needed.
+                </p>
+              </div>
+              <button type="button" className="report-modal__close" onClick={handleCloseManageResidents}>
+                Close
+              </button>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="resident-management">
+                <div className="resident-management__summary">
+                  <article className="resident-management__summary-card">
+                    <span>Total Residents</span>
+                    <strong>{residentSummary.total}</strong>
+                    <p>Live resident accounts currently available in the system.</p>
+                  </article>
+                  <article className="resident-management__summary-card">
+                    <span>Puroks Covered</span>
+                    <strong>{residentSummary.puroksCovered}</strong>
+                    <p>Resident records distributed across registered puroks.</p>
+                  </article>
+                </div>
+
+                <div className="resident-management__toolbar">
+                  <label className="resident-management__search">
+                    <span>Search Residents</span>
+                    <input
+                      type="text"
+                      value={residentsSearchTerm}
+                      onChange={(event) => setResidentsSearchTerm(event.target.value)}
+                      placeholder="Search by name, email, purok, contact, or gender"
+                    />
+                  </label>
+
+                  <button
+                    type="button"
+                    className="report-action-button report-action-button--ghost"
+                    onClick={() => loadResidents()}
+                    disabled={isResidentsLoading}
+                  >
+                    {isResidentsLoading ? "Refreshing..." : "Refresh List"}
+                  </button>
+                </div>
+
+                {residentsError ? <p className="report-modal__error">{residentsError}</p> : null}
+                {residentDetailsError ? <p className="report-modal__error">{residentDetailsError}</p> : null}
+
+                {isResidentsLoading ? (
+                  <div className="resident-management__empty">
+                    <p className="dashboard-empty-state">Loading resident accounts...</p>
+                  </div>
+                ) : visibleResidents.length === 0 ? (
+                  <div className="resident-management__empty">
+                    <p className="dashboard-empty-state">
+                      {residentsSearchTerm.trim()
+                        ? "No residents match the current search."
+                        : "No resident accounts are available yet."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="resident-management__grid">
+                    {visibleResidents.map((resident) => (
+                      <article key={resident._id} className="resident-card">
+                        <div className="resident-card__main">
+                          <div className="resident-card__identity">
+                            <span className="resident-card__avatar">
+                              {(resident.name || resident.email || "R").trim().slice(0, 1).toUpperCase()}
+                            </span>
+                            <div className="resident-card__copy">
+                              <h3>{resident.name || "Unnamed Resident"}</h3>
+                              <p>{resident.email || "No email available"}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="resident-card__side">
+                          <div className="resident-card__actions">
+                            <button
+                              type="button"
+                              className="report-action-button report-action-button--ghost"
+                              onClick={() => handleViewResidentDetails(resident._id)}
+                              disabled={isResidentDetailsLoading || isDeletingResident}
+                            >
+                              View Details
+                            </button>
+                            <button
+                              type="button"
+                              className="report-action-button report-action-button--danger"
+                              onClick={() => handleRequestDeleteResident(resident)}
+                              disabled={isDeletingResident}
+                            >
+                              Delete Account
+                            </button>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {selectedResidentDetails ? (
+        <div className="report-modal report-modal--stacked" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={handleCloseResidentDetails} />
+          <section className="report-modal__card report-modal__card--resident-details">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow report-modal__eyebrow--blue">Resident Details</p>
+                <h2>{selectedResidentDetails.name || "Resident Information"}</h2>
+                <p className="resident-modal__subtitle">
+                  Review the resident account information saved from the registration form.
+                </p>
+              </div>
+              <button type="button" className="report-modal__close" onClick={handleCloseResidentDetails}>
+                Close
+              </button>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="resident-details">
+                <div className="resident-details__hero">
+                  <span className="resident-details__avatar">
+                    {(selectedResidentDetails.name || selectedResidentDetails.email || "R").trim().slice(0, 1).toUpperCase()}
+                  </span>
+                  <div className="resident-details__hero-copy">
+                    <strong>{selectedResidentDetails.name || "Unnamed Resident"}</strong>
+                    <span>{selectedResidentDetails.email || "No email available"}</span>
+                    <small>
+                      {selectedResidentDetails.createdAt
+                        ? `Registered ${formatLongDate(selectedResidentDetails.createdAt)}`
+                        : "Registration date unavailable"}
+                    </small>
+                  </div>
+                </div>
+
+                <div className="resident-details__panel">
+                  <div className="resident-details__panel-header">
+                    <div>
+                      <span className="report-modal__eyebrow report-modal__eyebrow--blue">Resident Record</span>
+                      <h3>Account Information</h3>
+                    </div>
+                    <p>Complete resident account details from the current registration data.</p>
+                  </div>
+
+                  <div className="resident-details__grid">
+                    {RESIDENT_DETAILS_FIELDS.map((field) => (
+                      <article key={field.key} className="resident-details__card">
+                        <span>{field.label}</span>
+                        <strong>
+                          {field.formatter
+                            ? getResidentDisplayValue(selectedResidentDetails, field.key) === "Not available"
+                              ? "Not available"
+                              : field.formatter(selectedResidentDetails[field.key])
+                            : getResidentDisplayValue(selectedResidentDetails, field.key)}
+                        </strong>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="resident-details__panel">
+                  <div className="resident-details__panel-header">
+                    <div>
+                      <span className="report-modal__eyebrow report-modal__eyebrow--blue">Summary of Reports</span>
+                      <h3>Resident Report Activity</h3>
+                    </div>
+                    <p>Report totals for the selected resident only.</p>
+                  </div>
+
+                  {residentReportSummaryError ? <p className="report-modal__error">{residentReportSummaryError}</p> : null}
+
+                  {isResidentReportSummaryLoading ? (
+                    <div className="resident-details__summary-empty">
+                      <p className="dashboard-empty-state">Loading report summary...</p>
+                    </div>
+                  ) : (
+                    <div className="resident-details__summary-grid">
+                      {residentReportSummaryCards.map((item) => (
+                        <article
+                          key={item.label}
+                          className={["resident-details__summary-card", `resident-details__summary-card--${item.tone}`].join(" ")}
+                        >
+                          <span>{item.label}</span>
+                          <strong>{item.value}</strong>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {residentPendingDelete ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={() => (!isDeletingResident ? setResidentPendingDelete(null) : null)} />
+          <section className="report-modal__card report-modal__card--confirm report-modal__card--decision">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow">Resident Deletion</p>
+                <h2 className="report-modal__confirm-title">Delete Resident Account?</h2>
+                <p className="report-modal__confirm-copy">
+                  Are you sure you want to delete this resident account? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="report-modal__decision-card resident-delete-card">
+                <span className="report-modal__label">Selected resident</span>
+                <strong>{residentPendingDelete.name || "Unnamed Resident"}</strong>
+                <p>{residentPendingDelete.email || "No email available"}</p>
+              </div>
+
+              {deleteResidentError ? <p className="report-modal__error">{deleteResidentError}</p> : null}
+
+              <div className="report-modal__actions report-modal__actions--confirm">
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--ghost"
+                  onClick={() => setResidentPendingDelete(null)}
+                  disabled={isDeletingResident}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--danger"
+                  onClick={handleConfirmDeleteResident}
+                  disabled={isDeletingResident}
+                >
+                  {isDeletingResident ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isProfileModalOpen ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={handleCloseProfile} />
+          <section className="report-modal__card report-modal__card--profile">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow report-modal__eyebrow--blue">Admin Profile</p>
+                <h2>{profileName}</h2>
+                <p className="resident-modal__subtitle">Overview of the current authenticated admin account.</p>
+              </div>
+              <button type="button" className="report-modal__close" onClick={handleCloseProfile}>
+                Close
+              </button>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="profile-modal__hero-card">
+                <div className="profile-modal__avatar">{profileName.trim().slice(0, 1).toUpperCase()}</div>
+                <div className="profile-modal__hero-copy">
+                  <strong>{profileName}</strong>
+                  <span>{profileEmail}</span>
+                  <small>{profileRole === "admin" ? "Barangay Administrator" : profileRole}</small>
+                </div>
+              </div>
+
+              <div className="profile-modal__grid">
+                <div className="delete-report-summary__item profile-modal__detail-card">
+                  <span className="report-modal__label">Full Name</span>
+                  <p>{profileName}</p>
+                </div>
+                <div className="delete-report-summary__item profile-modal__detail-card">
+                  <span className="report-modal__label">Email</span>
+                  <p>{profileEmail}</p>
+                </div>
+                <div className="delete-report-summary__item profile-modal__detail-card">
+                  <span className="report-modal__label">Account Type</span>
+                  <p>{profileRole === "admin" ? "Administrator" : "Standard Account"}</p>
+                </div>
+                <div className="delete-report-summary__item profile-modal__detail-card">
+                  <span className="report-modal__label">Status</span>
+                  <p>Active Session</p>
+                </div>
+              </div>
+
+              <div className="profile-modal__summary">
+                <div className="profile-modal__summary-header">
+                  <span className="report-modal__label">Summary of Reports</span>
+                  <p>Snapshot of current report activity from the existing dashboard data.</p>
+                </div>
+                <div className="profile-modal__summary-grid">
+                  {profileReportSummary.map((item) => (
+                    <div key={item.label} className="profile-modal__summary-card">
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
+      {isLogoutConfirmOpen ? (
+        <div className="report-modal" role="dialog" aria-modal="true">
+          <div className="report-modal__backdrop" onClick={() => setIsLogoutConfirmOpen(false)} />
+          <section className="report-modal__card report-modal__card--confirm report-modal__card--decision">
+            <div className="report-modal__header">
+              <div className="report-modal__hero report-modal__hero--dark">
+                <p className="report-modal__eyebrow">Confirm Logout</p>
+                <h2 className="report-modal__confirm-title">Log out of the admin dashboard?</h2>
+                <p className="report-modal__confirm-copy">
+                  You will end the current admin session and return to the login screen.
+                </p>
+              </div>
+            </div>
+
+            <div className="report-modal__body">
+              <div className="report-modal__decision-card">
+                <span className="report-modal__label">Signed in as</span>
+                <p>{adminUser?.email || adminUser?.name || "Administrator"}</p>
+              </div>
+              <div className="report-modal__actions report-modal__actions--confirm">
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--ghost"
+                  onClick={() => setIsLogoutConfirmOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="report-action-button report-action-button--danger"
+                  onClick={handleLogout}
+                >
+                  Confirm Logout
+                </button>
+              </div>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {selectedReport ? (
         <div className="report-modal" role="dialog" aria-modal="true">
           <div className="report-modal__backdrop" onClick={() => setSelectedReport(null)} />
@@ -878,6 +2214,11 @@ function AdminDashboard() {
             </div>
 
             <div className="report-modal__body">
+              {(() => {
+                const residentId = getReportResidentId(selectedReport);
+                const isResidentProfileAvailable = Boolean(residentId);
+
+                return (
               <div className="report-modal__info-grid">
                 <div className="report-modal__info-card">
                   <span className="report-modal__label">Date Filed</span>
@@ -893,9 +2234,26 @@ function AdminDashboard() {
                 </div>
                 <div className="report-modal__info-card">
                   <span className="report-modal__label">Resident</span>
-                  <p>{getResidentName(selectedReport)}</p>
+                  <div className="report-modal__resident-row">
+                    {isResidentProfileAvailable ? (
+                      <button
+                        type="button"
+                        className="report-modal__resident-name-button"
+                        onClick={() => handleViewResidentDetails(residentId)}
+                        disabled={isResidentDetailsLoading}
+                        title="View resident profile"
+                        aria-label="Open resident profile"
+                      >
+                        {getResidentName(selectedReport)}
+                      </button>
+                    ) : (
+                      <p>{getResidentName(selectedReport)}</p>
+                    )}
+                  </div>
                 </div>
               </div>
+                );
+              })()}
 
               <div className="report-modal__description">
                 <span className="report-modal__label">Description</span>
@@ -944,8 +2302,16 @@ function AdminDashboard() {
 
                 <div className="report-modal__comment-list">
                   {selectedReport.comments?.length ? (
-                    selectedReport.comments.map((comment) => (
-                      <article key={comment._id || `${comment.text}-${comment.date}`} className="comment-card">
+                    selectedReport.comments.map((comment) => {
+                      const commentAttachment = getCommentAttachment(comment);
+
+                      return (
+                      <article
+                        key={comment._id || `${comment.text}-${comment.date}`}
+                        className={["comment-card", recentCommentId && comment._id === recentCommentId ? "comment-card--new" : ""]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
                         <div className="comment-card__header">
                           <div>
                             <strong>{comment.user?.name || "Admin"}</strong>
@@ -1025,10 +2391,50 @@ function AdminDashboard() {
                             ) : null}
                           </div>
                         ) : (
-                          <p>{comment.text}</p>
+                          <div className="comment-card__content">
+                            {comment.text ? <p>{comment.text}</p> : null}
+                            {commentAttachment ? (
+                              <div className="comment-card__attachment">
+                                {commentAttachment.isImage ? (
+                                  <div className="comment-card__attachment-image-wrap">
+                                    <a href={commentAttachment.url} target="_blank" rel="noreferrer">
+                                      <img
+                                        src={commentAttachment.url}
+                                        alt={commentAttachment.name}
+                                        className="comment-card__attachment-image"
+                                      />
+                                    </a>
+                                    <a
+                                      href={commentAttachment.url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="comment-card__attachment-link"
+                                    >
+                                      View Image
+                                    </a>
+                                  </div>
+                                ) : commentAttachment.url ? (
+                                  <a
+                                    href={commentAttachment.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="comment-card__attachment-file"
+                                  >
+                                    <strong>{commentAttachment.name}</strong>
+                                    <span>Open attachment</span>
+                                  </a>
+                                ) : (
+                                  <div className="comment-card__attachment-file">
+                                    <strong>{commentAttachment.name}</strong>
+                                    <span>Attachment unavailable</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
                         )}
                       </article>
-                    ))
+                    )})
                   ) : (
                     <p className="dashboard-empty-state">No comments yet for this report.</p>
                   )}
@@ -1038,28 +2444,47 @@ function AdminDashboard() {
                   <input
                     type="text"
                     value={commentText}
-                    onChange={(event) => setCommentText(event.target.value)}
-                    placeholder="Add an admin comment"
+                    onChange={(event) => {
+                      setCommentText(event.target.value);
+                      if (commentActionError) {
+                        setCommentActionError("");
+                      }
+                    }}
+                    placeholder="Add a comment"
                   />
                   <label className="report-modal__attachment">
                     <span>Attach file or photo</span>
                     <input
+                      ref={attachmentInputRef}
                       type="file"
                       accept="image/*,.pdf,.doc,.docx"
-                      onChange={(event) => setAttachmentFile(event.target.files?.[0] || null)}
+                      onChange={(event) => {
+                        setAttachmentFile(event.target.files?.[0] || null);
+                        if (commentActionError) {
+                          setCommentActionError("");
+                        }
+                      }}
                     />
                   </label>
                   <button
                     type="button"
                     className="report-action-button report-action-button--ghost"
                     onClick={handleAddComment}
+                    disabled={isAddingComment}
                   >
-                    Add Comment
+                    {isAddingComment ? (
+                      <span className="report-modal__button-progress" aria-hidden="true">
+                        <span />
+                        <span />
+                        <span />
+                      </span>
+                    ) : null}
+                    {isAddingComment ? "Adding..." : "Add Comment"}
                   </button>
                 </div>
 
                 {attachmentFile ? (
-                  <div className="report-modal__attachment-preview">
+                  <div className="report-modal__attachment-preview report-modal__attachment-preview--visible">
                     <div>
                       <span className="report-modal__label">Selected Attachment</span>
                       <p>{attachmentFile.name}</p>
@@ -1072,6 +2497,7 @@ function AdminDashboard() {
                     )}
                   </div>
                 ) : null}
+                {!editingCommentId && commentActionError ? <p className="report-modal__error">{commentActionError}</p> : null}
               </div>
             </div>
           </section>
