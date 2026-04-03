@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import API from "../../api/axios";
-import AnalyticsDashboard from "../../components/analytics/AnalyticsDashboard";
+import AnalyticsDashboard from "./components/analytics/AnalyticsDashboard";
 import { deleteNotification, fetchMyNotifications, markNotificationAsRead } from "../../api/notifications";
 import {
   addReportComment,
@@ -26,7 +26,7 @@ import FilterBar from "./components/dashboard/FilterBar";
 import HeaderDashboard from "./components/dashboard/HeaderDashboard";
 import ReportCardAdmin from "./components/reports/ReportCardAdmin";
 import ReportsSection from "./components/reports/ReportsSection";
-import "./AdminDashboard.css";
+import "./styles/AdminDashboard.css";
 
 const INITIAL_RESIDENT_FORM = {
   email: "",
@@ -1395,7 +1395,7 @@ function AdminDashboard() {
               </div>
             ) : (
               <div className="dashboard-report-scroll dashboard-report-scroll--today">
-                <div className={["report-grid", !selectedDate ? "report-grid--today" : ""].filter(Boolean).join(" ")}>
+                <div className={["report-grid", "report-grid--today"].filter(Boolean).join(" ")}>
                   {featuredReports.map((report) => (
                     <ReportCardAdmin
                       key={report._id}
