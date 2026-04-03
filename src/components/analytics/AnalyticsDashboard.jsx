@@ -4,7 +4,7 @@ import { createReportSummary, fetchReportSummaries } from "../../api/reportSumma
 import StatCard from "../../pages/Admin/components/dashboard/StatCard";
 import { formatDateTime } from "../../utils/dateUtils";
 
-const ORDERED_PUROKS = ["Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5"];
+const ORDERED_PUROKS = ["Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5", "Purok 6", "Purok 7"];
 
 function getPeriodStart(period) {
   const now = new Date();
@@ -54,7 +54,7 @@ function normalizePurokLabel(value) {
   const rawValue = String(value || "").trim();
   const purokNumber = rawValue.match(/\d+/)?.[0];
 
-  if (purokNumber && Number(purokNumber) >= 1 && Number(purokNumber) <= 5) {
+  if (purokNumber && Number(purokNumber) >= 1 && Number(purokNumber) <= 7) {
     return `Purok ${purokNumber}`;
   }
 

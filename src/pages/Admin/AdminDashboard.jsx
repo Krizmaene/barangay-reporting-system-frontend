@@ -39,7 +39,7 @@ const INITIAL_RESIDENT_FORM = {
   gender: "",
 };
 
-const PUROK_OPTIONS = ["Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5"];
+const PUROK_OPTIONS = ["Purok 1", "Purok 2", "Purok 3", "Purok 4", "Purok 5", "Purok 6", "Purok 7"];
 const DEFAULT_ADMIN_EMAIL = "brgymataasnalupa@brs.com";
 const RESIDENT_DETAILS_FIELDS = [
   { key: "email", label: "Email" },

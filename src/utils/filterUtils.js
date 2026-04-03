@@ -108,6 +108,8 @@ export function getPurokSummary(reports) {
     "Purok 3": 0,
     "Purok 4": 0,
     "Purok 5": 0,
+    "Purok 6": 0,
+    "Purok 7": 0,
   };
 
   reports.forEach((report) => {

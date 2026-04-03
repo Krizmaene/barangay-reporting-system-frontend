@@ -81,7 +81,7 @@ function ReportCardAdmin({
 
       <div className="report-card__meta">
         <span>{formatDateTime(report.createdAt)}</span>
-        <span>Purok {report.purok || "N/A"}</span>
+        <span>{report.purok || "N/A"}</span>
       </div>
 
       <div className="report-card__body">
