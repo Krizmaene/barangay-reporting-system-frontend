@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './styles/Profile.css';
 import ResidentLayout from './components/layout/ResidentLayout';
 import API from '../../api/axios';
 import { normalizeReportPayload } from '../../utils/reportUtils';
+import { normalizeResidentUser } from '../../utils/userUtils';
 
 export default function Profile() {
   const [user, setUser] = useState(null);
@@ -12,7 +12,7 @@ export default function Profile() {
   useEffect(() => {
     const saved = localStorage.getItem('user');
     if (saved) {
-      setUser(JSON.parse(saved));
+      setUser(normalizeResidentUser(JSON.parse(saved)));
     }
 
     fetchReports();
@@ -29,24 +29,21 @@ export default function Profile() {
 
   const initials = user?.fullName
     ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'JD';
+    : 'R';
 
   const resolved = reports.filter(r => r.status === 'Resolved').length;
 
   const fields = [
-    { label: 'Full Name', value: user?.fullName || 'Juan Dela Cruz' },
-    { label: 'Email', value: user?.email || 'juandelacruz@gmail.com' },
-    { label: 'Mobile Number', value: user?.mobile || '0917 123 4567' },
-    { label: 'Address', value: `${user?.purok || 'Purok 1'}, Mataas na Lupa` },
+    { label: 'Full Name', value: user?.fullName || 'Not provided' },
+    { label: 'Email', value: user?.email || 'Not provided' },
+    { label: 'Mobile Number', value: user?.mobile || 'Not provided' },
+    { label: 'Address', value: user?.purok ? `${user.purok}, Mataas na Lupa` : 'Not provided' },
     { label: 'Account Type', value: 'Resident' },
-    { label: 'Member Since', value: user?.memberSince || 'March 2026' },
+    { label: 'Member Since', value: user?.memberSince || 'Not available' },
   ];
 
-  const navigate = useNavigate();
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
+    window.dispatchEvent(new CustomEvent('resident-request-logout'));
   };
 
   return (
@@ -57,7 +54,7 @@ export default function Profile() {
           <div className="profile__hero-avatar">{initials}</div>
           <div>
             <div className="profile__hero-label">USER PROFILE</div>
-            <div className="profile__hero-name">{user?.fullName || 'Juan Dela Cruz'}</div>
+            <div className="profile__hero-name">{user?.fullName || 'Resident Account'}</div>
             <div className="profile__hero-sub">Resident account preview linked from the top profile card.</div>
           </div>
         </div>

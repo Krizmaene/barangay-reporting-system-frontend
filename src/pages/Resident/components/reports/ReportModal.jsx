@@ -1,6 +1,7 @@
 import React from 'react';
 import '../../styles/MyReports.css';
 import { normalizeReportStatus } from '../../../../utils/reportUtils';
+import { formatDateTime } from '../../../../utils/dateUtils';
 
 const statusColors = {
   Pending: '#f59e0b',
@@ -11,7 +12,11 @@ const statusColors = {
 export default function ReportModal({ report, onClose }) {
   if (!report) return null;
 
-  const adminFeedback = report.adminFeedback || [];
+  const adminFeedback = Array.isArray(report.comments) && report.comments.length > 0
+    ? report.comments
+    : Array.isArray(report.adminFeedback)
+      ? report.adminFeedback
+      : [];
   const status = normalizeReportStatus(report.status);
 
   return (
@@ -80,10 +85,14 @@ export default function ReportModal({ report, onClose }) {
             </div>
           ) : (
             adminFeedback.map((fb, i) => (
-              <div key={i} className="report-modal__feedback-item">
-                <div className="report-modal__feedback-author">{fb.author}</div>
-                <div className="report-modal__feedback-text">{fb.text}</div>
-                {fb.date && <div className="report-modal__feedback-date">{fb.date}</div>}
+              <div key={fb._id || i} className="report-modal__feedback-item">
+                <div className="report-modal__feedback-author">{fb.author || fb.user?.name || 'Admin'}</div>
+                <div className="report-modal__feedback-text">{fb.text || fb.comment || fb.message}</div>
+                {(fb.date || fb.createdAt || fb.updatedAt) && (
+                  <div className="report-modal__feedback-date">
+                    {formatDateTime(fb.date || fb.createdAt || fb.updatedAt)}
+                  </div>
+                )}
               </div>
             ))
           )}

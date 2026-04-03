@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import './styles/Settings.css';
 import ResidentLayout from './components/layout/ResidentLayout';
 
@@ -45,11 +44,8 @@ export default function Settings() {
     setTimeout(() => setPwSuccess(false), 3000);
   };
 
-  const navigate = useNavigate();
   const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/");
+    window.dispatchEvent(new CustomEvent('resident-request-logout'));
   };
 
   return (

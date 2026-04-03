@@ -7,6 +7,19 @@ const STATUS_LABELS = {
   "in-progress": 'In Progress',
 };
 
+function normalizeComment(comment) {
+  if (!comment) {
+    return null;
+  }
+
+  return {
+    ...comment,
+    author: comment.author || comment.user?.name || comment.user?.fullName || "Admin",
+    text: comment.text || comment.comment || comment.message || "",
+    date: comment.date || comment.createdAt || comment.updatedAt || "",
+  };
+}
+
 export function normalizeReportStatus(status) {
   if (!status && status !== 0) {
     return 'Pending';
@@ -27,5 +40,11 @@ export function normalizeReportPayload(payload) {
     ...report,
     id: report.id || report._id,
     status: normalizeReportStatus(report.status),
+    comments: (Array.isArray(report.comments) ? report.comments : Array.isArray(report.adminFeedback) ? report.adminFeedback : [])
+      .map(normalizeComment)
+      .filter(Boolean),
+    adminFeedback: (Array.isArray(report.adminFeedback) ? report.adminFeedback : Array.isArray(report.comments) ? report.comments : [])
+      .map(normalizeComment)
+      .filter(Boolean),
   }));
 }

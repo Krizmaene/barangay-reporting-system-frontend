@@ -12,15 +12,15 @@ const navItems = [
 export default function ResidentSidebar({ activePage, onNavigate, user, onLogout }) {
   const initials = user?.fullName
     ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'JD';
+    : 'R';
 
   return (
     <aside className="res-sidebar">
       <div className="res-sidebar__profile" onClick={() => onNavigate('profile')} style={{ cursor: 'pointer' }}>
         <div className="res-sidebar__avatar">{initials}</div>
         <div className="res-sidebar__info">
-          <div className="res-sidebar__name">{user?.fullName || 'Juan Dela Cruz'}</div>
-          <div className="res-sidebar__purok">{user?.purok || 'Purok 1'}</div>
+          <div className="res-sidebar__name">{user?.fullName || user?.email || 'Resident Account'}</div>
+          <div className="res-sidebar__purok">{user?.purok || 'Purok not set'}</div>
           <div className="res-sidebar__role">Resident</div>
         </div>
       </div>

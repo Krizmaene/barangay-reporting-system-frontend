@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import './styles/SubmitReport.css';
 import ResidentLayout from './components/layout/ResidentLayout';
 import API from '../../api/axios';
+import { normalizeResidentUser } from '../../utils/userUtils';
 
 const CATEGORIES = [
   'Trash Complaint',
@@ -38,10 +39,22 @@ function validate(fields) {
 export default function SubmitReport({ user }) {
   const today = new Date().toISOString().split('T')[0];
   const fileRef = useRef(null);
+  const currentUser = (() => {
+    if (user) {
+      return normalizeResidentUser(user);
+    }
+
+    try {
+      const saved = localStorage.getItem('user');
+      return saved ? normalizeResidentUser(JSON.parse(saved)) : null;
+    } catch {
+      return null;
+    }
+  })();
 
   const [fields, setFields] = useState({
     category: 'Trash Complaint',
-    purok: user?.purok || 'Purok 1',
+    purok: currentUser?.purok || 'Purok 1',
     location: '',
     date: today,
     personInvolved: '',
@@ -50,6 +63,7 @@ export default function SubmitReport({ user }) {
   });
   const [errors, setErrors] = useState({});
   const [fileName, setFileName] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(false);
 
@@ -60,7 +74,8 @@ export default function SubmitReport({ user }) {
 
   const handleFileChange = e => {
     const file = e.target.files[0];
-    if (file) setFileName(file.name);
+    setSelectedFile(file || null);
+    setFileName(file ? file.name : '');
   };
 
   const handleDraft = () => {
@@ -77,6 +92,24 @@ export default function SubmitReport({ user }) {
 
     setLoading(true);
     try {
+      let attachmentPayload;
+
+      if (selectedFile) {
+        const attachmentUrl = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Unable to read the selected file.'));
+          reader.readAsDataURL(selectedFile);
+        });
+
+        attachmentPayload = {
+          name: selectedFile.name,
+          mimeType: selectedFile.type || 'application/octet-stream',
+          url: attachmentUrl,
+          isImage: selectedFile.type.startsWith('image/'),
+        };
+      }
+
       await API.post('/reports', {
         category: fields.category,
         purok: fields.purok,
@@ -85,11 +118,17 @@ export default function SubmitReport({ user }) {
         personInvolved: fields.personInvolved,
         description: fields.description,
         updateMethod: fields.updateMethod,
+        attachment: attachmentPayload,
+        attachments: attachmentPayload ? [attachmentPayload] : [],
       });
 
       setToast('success');
       setFields(f => ({ ...f, location: '', personInvolved: '', description: '', date: today }));
       setFileName('');
+      setSelectedFile(null);
+      if (fileRef.current) {
+        fileRef.current.value = '';
+      }
     } catch (err) {
       console.error(err);
       setToast('error');

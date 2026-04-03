@@ -2,6 +2,7 @@ import { useState } from "react";
 import API from "../../api/axios";
 import "../../App.css";
 import loginImage from "../../assets/login-image.png";
+import { normalizeResidentUser } from "../../utils/userUtils";
 
 function Login() {
 
@@ -17,10 +18,12 @@ function Login() {
         password
       });
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(res.data.user));
+      const normalizedUser = normalizeResidentUser(res.data.user);
 
-      const role = res.data.user.role;
+      localStorage.setItem("token", res.data.token);
+      localStorage.setItem("user", JSON.stringify(normalizedUser));
+
+      const role = normalizedUser.role;
 
       if (role === "admin") {
         window.location.href = "/admin";

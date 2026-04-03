@@ -1,4 +1,5 @@
 import { createContext, useState, useEffect } from "react";
+import { normalizeResidentUser } from "../utils/userUtils";
 
 export const AuthContext = createContext();
 
@@ -8,14 +9,15 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      setUser(normalizeResidentUser(JSON.parse(storedUser)));
     }
   }, []);
 
   const login = (userData, token) => {
-    localStorage.setItem("user", JSON.stringify(userData));
+    const normalizedUser = normalizeResidentUser(userData);
+    localStorage.setItem("user", JSON.stringify(normalizedUser));
     localStorage.setItem("token", token);
-    setUser(userData);
+    setUser(normalizedUser);
   };
 
   const logout = () => {

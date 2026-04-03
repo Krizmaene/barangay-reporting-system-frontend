@@ -4,7 +4,7 @@ import '../../styles/ResidentLayout.css';
 export default function ResidentNavbar({ activePage, onNavigate, unreadCount, user }) {
   const initials = user?.fullName
     ? user.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-    : 'JD';
+    : 'R';
 
   const myReportsActive = activePage === 'reports';
   const newReportActive = activePage === 'submit';
@@ -37,7 +37,7 @@ export default function ResidentNavbar({ activePage, onNavigate, unreadCount, us
         <div className={`res-navbar__user${profileActive ? ' res-navbar__user--active' : ''}`} onClick={() => onNavigate('profile')}>
           <div className="res-navbar__user-avatar">{initials}</div>
           <div className="res-navbar__user-info">
-            <div className="res-navbar__user-name">{user?.fullName || 'Juan Dela Cruz'}</div>
+            <div className="res-navbar__user-name">{user?.fullName || user?.email || 'Resident Account'}</div>
             <div className="res-navbar__user-role">Resident</div>
           </div>
         </div>

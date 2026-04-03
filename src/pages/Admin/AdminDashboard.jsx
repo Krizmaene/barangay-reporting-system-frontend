@@ -1121,6 +1121,58 @@ function AdminDashboard() {
   };
 
   const getReportAttachments = (report) => {
+    const normalizeAttachmentItem = (item, index) => {
+      if (!item) {
+        return null;
+      }
+
+      if (typeof item === "string") {
+        const fileName = item.split("/").pop() || `Attachment ${index + 1}`;
+        const isImage = /^data:image\//i.test(item) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(item);
+
+        return {
+          id: `${fileName}-${index}`,
+          name: fileName,
+          url: item,
+          isImage,
+        };
+      }
+
+      const url =
+        item.url ||
+        item.path ||
+        item.src ||
+        item.downloadUrl ||
+        item.fileUrl ||
+        item.base64 ||
+        item.data ||
+        item.secure_url ||
+        "";
+      const name =
+        item.name ||
+        item.fileName ||
+        item.originalName ||
+        item.filename ||
+        item.public_id ||
+        url.split("/").pop() ||
+        `Attachment ${index + 1}`;
+      const type = item.type || item.mimeType || item.contentType || "";
+      const isImage =
+        Boolean(item.isImage) ||
+        type.startsWith("image/") ||
+        /^data:image\//i.test(url) ||
+        /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url || name);
+
+      return url
+        ? {
+            id: item._id || item.id || `${name}-${index}`,
+            name,
+            url,
+            isImage,
+          }
+        : null;
+    };
+
     const attachmentCandidates = [
       report?.attachments,
       report?.files,
@@ -1128,38 +1180,33 @@ function AdminDashboard() {
       report?.attachment,
       report?.file,
       report?.image,
+      report?.photos,
+      report?.photo,
+      report?.media,
+      report?.mediaFiles,
+      report?.documents,
+      report?.document,
+      report?.evidence,
+      report?.evidences,
+      report?.proof,
+      report?.proofs,
     ]
       .flatMap((value) => (Array.isArray(value) ? value : value ? [value] : []))
       .filter(Boolean);
 
-    return attachmentCandidates
-      .map((item, index) => {
-        if (typeof item === "string") {
-          const fileName = item.split("/").pop() || `Attachment ${index + 1}`;
-
-          return {
-            id: `${fileName}-${index}`,
-            name: fileName,
-            url: item,
-            isImage: /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(item),
-          };
-        }
-
-        const url = item.url || item.path || item.src || item.downloadUrl || item.fileUrl || "";
-        const name = item.name || item.fileName || item.originalName || url.split("/").pop() || `Attachment ${index + 1}`;
-        const type = item.type || item.mimeType || "";
-        const isImage = type.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(url || name);
-
-        return url
-          ? {
-              id: item._id || `${name}-${index}`,
-              name,
-              url,
-              isImage,
-            }
-          : null;
-      })
+    const discoveredObjectAttachments = Object.values(report || {})
+      .filter((value) => value && typeof value === "object")
+      .flatMap((value) => (Array.isArray(value) ? value : [value]))
+      .map((value, index) => normalizeAttachmentItem(value, attachmentCandidates.length + index))
       .filter(Boolean);
+
+    const allAttachments = [...attachmentCandidates, ...discoveredObjectAttachments]
+      .map((item, index) => normalizeAttachmentItem(item, index))
+      .filter(Boolean);
+
+    return allAttachments.filter(
+      (attachment, index, items) => items.findIndex((item) => item.url === attachment.url && item.name === attachment.name) === index
+    );
   };
 
   const handleRequestDeleteReport = (report) => {
